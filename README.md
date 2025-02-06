@@ -5,5 +5,5 @@ NECESSARY TOOLS TO BE DOWNLOADED
 - yt-dlp
   you can download the last relaese from this repository: https://github.com/yt-dlp/yt-dlp.git
 
-  - FFmpeg
+ - FFmpeg
      you can download the last relaese from this site : https://www.ffmpeg.org/
