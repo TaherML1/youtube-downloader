@@ -3,12 +3,15 @@ import 'package:process_run/shell.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:youtube_downloader/AudioDownloadWidget.dart';
+import 'package:youtube_downloader/playlist_download_widget.dart';
 
 void main() {
   runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -25,6 +28,8 @@ class MyApp extends StatelessWidget {
 }
 
 class YtDlpIntegration extends StatefulWidget {
+  const YtDlpIntegration({super.key});
+
   @override
   _YtDlpIntegrationState createState() => _YtDlpIntegrationState();
 }
@@ -156,14 +161,14 @@ class _YtDlpIntegrationState extends State<YtDlpIntegration> {
 Widget build(BuildContext context) {
   return Scaffold(
     appBar: AppBar(
-      title: Text('youtube video downloader'),
+      title: const Text('youtube video downloader'),
       actions: [
         IconButton(
-          icon: Icon(Icons.refresh),
+          icon: const Icon(Icons.refresh),
           onPressed: _resetFields,
         ),
         IconButton(
-          icon: Icon(Icons.music_note),
+          icon: const Icon(Icons.music_note),
           onPressed: () {
             Navigator.push(
               context,
@@ -171,6 +176,15 @@ Widget build(BuildContext context) {
             );
           },
         ),
+         IconButton(
+    icon: const Icon(Icons.playlist_play),
+    onPressed: () {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => PlaylistDownloadWidget()),
+      );
+    },
+  ),
       ],
     ),
     body: Padding(
@@ -179,36 +193,36 @@ Widget build(BuildContext context) {
         children: [
           TextField(
             controller: _urlController,
-            decoration: InputDecoration(
+            decoration: const InputDecoration(
               labelText: 'Video URL',
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.link),
             ),
           ),
-          SizedBox(height: 20),
+          const SizedBox(height: 20),
           Row(
             children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  icon: Icon(Icons.search),
-                  label: Text('Fetch Formats'),
+                  icon: const Icon(Icons.search),
+                  label: const Text('Fetch Formats'),
                   onPressed: _fetchFormats,
                 ),
               ),
-              SizedBox(width: 10),
+              const SizedBox(width: 10),
               Expanded(
                 child: ElevatedButton.icon(
-                  icon: Icon(Icons.folder_open),
-                  label: Text('Select Directory'),
+                  icon: const Icon(Icons.folder_open),
+                  label: const Text('Select Directory'),
                   onPressed: _pickDirectory,
                 ),
               ),
             ],
           ),
-          SizedBox(height: 20),
+          const SizedBox(height: 20),
           if (_videoFormats.isNotEmpty)
             DropdownButtonFormField<String>(
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 labelText: 'Video Format',
                 border: OutlineInputBorder(),
               ),
@@ -219,10 +233,10 @@ Widget build(BuildContext context) {
               )).toList(),
               onChanged: (value) => setState(() => _selectedVideoFormat = value),
             ),
-          SizedBox(height: 10),
+          const SizedBox(height: 10),
           if (_audioFormats.isNotEmpty)
             DropdownButtonFormField<String>(
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 labelText: 'Audio Format',
                 border: OutlineInputBorder(),
               ),
@@ -233,18 +247,18 @@ Widget build(BuildContext context) {
               )).toList(),
               onChanged: (value) => setState(() => _selectedAudioFormat = value),
             ),
-          SizedBox(height: 20),
+          const SizedBox(height: 20),
           ElevatedButton.icon(
-            icon: Icon(Icons.download),
-            label: Text('Download & Merge'),
+            icon: const Icon(Icons.download),
+            label: const Text('Download & Merge'),
             onPressed: _downloadVideo,
             style: ElevatedButton.styleFrom(
-              padding: EdgeInsets.symmetric(vertical: 15),
+              padding: const EdgeInsets.symmetric(vertical: 15),
             ),
           ),
-          SizedBox(height: 20),
+          const SizedBox(height: 20),
           if (_isLoading)
-            Center(child: CircularProgressIndicator())
+            const Center(child: CircularProgressIndicator())
           else
             Card(
               child: Padding(
@@ -252,17 +266,17 @@ Widget build(BuildContext context) {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Status:', style: TextStyle(fontWeight: FontWeight.bold)),
-                    SizedBox(height: 8),
-                    Text(_output, style: TextStyle(color: Colors.green)),
+                    const Text('Status:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Text(_output, style: const TextStyle(color: Colors.green)),
                     if (_selectedDirectory != null) ...[
-                      SizedBox(height: 12),
-                      Text('Download Directory:', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 12),
+                      const Text('Download Directory:', style: TextStyle(fontWeight: FontWeight.bold)),
                       Text(_selectedDirectory!),
                     ],
                     if (_videoTitle != null) ...[
-                      SizedBox(height: 12),
-                      Text('Video Title:', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 12),
+                      const Text('Video Title:', style: TextStyle(fontWeight: FontWeight.bold)),
                       Text(_videoTitle!),
                     ],
                   ],

@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 
 class AudioDownloadWidget extends StatefulWidget {
+  const AudioDownloadWidget({super.key});
+
   @override
   _AudioDownloadWidgetState createState() => _AudioDownloadWidgetState();
 }
@@ -113,10 +115,10 @@ class _AudioDownloadWidgetState extends State<AudioDownloadWidget> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Audio Downloader'),
+        title: const Text('Audio Downloader'),
         actions: [
           IconButton(
-            icon: Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh),
             onPressed: _resetFields,
           )
         ],
@@ -127,36 +129,36 @@ class _AudioDownloadWidgetState extends State<AudioDownloadWidget> {
           children: [
             TextField(
               controller: _urlController,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 labelText: 'Audio URL',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.link),
               ),
             ),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             Row(
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    icon: Icon(Icons.search),
-                    label: Text('Fetch Audio Formats'),
+                    icon: const Icon(Icons.search),
+                    label: const Text('Fetch Audio Formats'),
                     onPressed: _fetchAudioFormats,
                   ),
                 ),
-                SizedBox(width: 10),
+                const SizedBox(width: 10),
                 Expanded(
                   child: ElevatedButton.icon(
-                    icon: Icon(Icons.folder_open),
-                    label: Text('Select Directory'),
+                    icon: const Icon(Icons.folder_open),
+                    label: const Text('Select Directory'),
                     onPressed: _pickDirectory,
                   ),
                 ),
               ],
             ),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             if (_audioFormats.isNotEmpty)
               DropdownButtonFormField<String>(
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'Audio Format',
                   border: OutlineInputBorder(),
                 ),
@@ -167,18 +169,18 @@ class _AudioDownloadWidgetState extends State<AudioDownloadWidget> {
                 )).toList(),
                 onChanged: (value) => setState(() => _selectedAudioFormat = value),
               ),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             ElevatedButton.icon(
-              icon: Icon(Icons.download),
-              label: Text('Download Audio'),
+              icon: const Icon(Icons.download),
+              label: const Text('Download Audio'),
               onPressed: _downloadAudio,
               style: ElevatedButton.styleFrom(
-                padding: EdgeInsets.symmetric(vertical: 15),
+                padding: const EdgeInsets.symmetric(vertical: 15),
               ),
             ),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             if (_isLoading)
-              Center(child: CircularProgressIndicator())
+              const Center(child: CircularProgressIndicator())
             else
               Card(
                 child: Padding(
@@ -186,17 +188,17 @@ class _AudioDownloadWidgetState extends State<AudioDownloadWidget> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Status:', style: TextStyle(fontWeight: FontWeight.bold)),
-                      SizedBox(height: 8),
-                      Text(_output, style: TextStyle(color: Colors.green)),
+                      const Text('Status:', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      Text(_output, style: const TextStyle(color: Colors.green)),
                       if (_selectedDirectory != null) ...[
-                        SizedBox(height: 12),
-                        Text('Download Directory:', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 12),
+                        const Text('Download Directory:', style: TextStyle(fontWeight: FontWeight.bold)),
                         Text(_selectedDirectory!),
                       ],
                       if (_audioTitle != null) ...[
-                        SizedBox(height: 12),
-                        Text('Audio Title:', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 12),
+                        const Text('Audio Title:', style: TextStyle(fontWeight: FontWeight.bold)),
                         Text(_audioTitle!),
                       ],
                     ],
