@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:process_run/shell.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/services.dart';
+import '../models/download_history.dart';
+import '../services/history_db.dart';
+import 'package:youtube_downloader/HistoryScreen.dart';
 
 class PlaylistDownloadWidget extends StatefulWidget {
   const PlaylistDownloadWidget({super.key});
@@ -17,10 +21,12 @@ class _PlaylistDownloadWidgetState extends State<PlaylistDownloadWidget> {
   String _output = '';
   String? _selectedDirectory;
   bool _isLoading = false;
+  bool _isFetching = false;
   String? _playlistTitle;
   final Shell _shell = Shell();
   bool _downloadAsAudio = false;
   bool _createPlaylistFolder = true;
+  String? _thumbnailUrl;
 
   @override
   void initState() {
@@ -38,34 +44,66 @@ class _PlaylistDownloadWidgetState extends State<PlaylistDownloadWidget> {
     await prefs.setString('download_directory', directory);
   }
 
+  String? _extractVideoId(String url) {
+    final regExp = RegExp(
+      r'(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})'
+    );
+    return regExp.firstMatch(url)?.group(1);
+  }
+
   Future<void> _fetchPlaylistInfo() async {
     if (_urlController.text.isEmpty) {
-      setState(() => _output = 'Please enter a playlist URL');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a playlist URL')),
+      );
       return;
     }
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isFetching = true;
+      _thumbnailUrl = null;
+    });
+
     try {
-      // Get playlist title
+      final videoId = _extractVideoId(_urlController.text);
+      if (videoId != null) {
+        setState(() => _thumbnailUrl = 'https://img.youtube.com/vi/$videoId/maxresdefault.jpg');
+      }
+
       var titleResult = await _shell.run('yt-dlp --get-title ${_urlController.text}');
       _playlistTitle = titleResult.outText.split('\n').first.trim().replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
 
-      // Get playlist item count
       var countResult = await _shell.run('yt-dlp --flat-playlist --print "%(playlist_index)s" ${_urlController.text} | tail -n 1');
       int itemCount = int.tryParse(countResult.outText.trim()) ?? 0;
 
       setState(() {
-        _output = 'Playlist found: $_playlistTitle\nContains $itemCount items';
         if (itemCount > 0) {
           _startIndexController.text = '1';
           _endIndexController.text = itemCount.toString();
         }
       });
     } catch (e) {
-      setState(() => _output = 'Error fetching playlist info: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}')),
+      );
     } finally {
-      setState(() => _isLoading = false);
+      setState(() => _isFetching = false);
     }
+  }
+
+  Future<void> _saveDownloadHistory(String filePath) async {
+    if (_playlistTitle == null || _urlController.text.isEmpty) return;
+
+    final history = DownloadHistory(
+      title: _playlistTitle!,
+      url: _urlController.text,
+      thumbnailUrl: _thumbnailUrl ?? '',
+      filePath: filePath,
+      downloadTime: DateTime.now(),
+      isPlaylist: true,
+    );
+
+    await HistoryDatabase.instance.addHistory(history);
   }
 
   Future<void> _downloadPlaylist() async {
@@ -78,24 +116,30 @@ class _PlaylistDownloadWidgetState extends State<PlaylistDownloadWidget> {
         rangeOption = '--playlist-items ${_startIndexController.text}-${_endIndexController.text}';
       }
 
-      String folderOption = _createPlaylistFolder ? '--output "$_selectedDirectory/$_playlistTitle/%(title)s.%(ext)s"' : 
-                                            '--output "$_selectedDirectory/%(title)s.%(ext)s"';
+      final savePath = _createPlaylistFolder
+          ? '$_selectedDirectory/$_playlistTitle'
+          : _selectedDirectory!;
 
+      String folderOption = '--output "$savePath/%(title)s.%(ext)s"';
       String audioOption = _downloadAsAudio ? '-x --audio-format mp3' : '';
 
       var command = 'yt-dlp $audioOption $rangeOption $folderOption ${_urlController.text}';
-
       var result = await _shell.run(command);
 
-      setState(() {
-        if (result.outText.contains('has already been downloaded')) {
-          _output = 'Some items were already downloaded.';
-        } else {
-          _output = 'Playlist download completed successfully!';
-        }
-      });
+      if (result.outText.contains('has already been downloaded')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Some items were already downloaded')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Playlist download completed!')),
+        );
+        _saveDownloadHistory(savePath);
+      }
     } catch (e) {
-      setState(() => _output = 'Error: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}')),
+      );
     } finally {
       setState(() => _isLoading = false);
     }
@@ -114,8 +158,8 @@ class _PlaylistDownloadWidgetState extends State<PlaylistDownloadWidget> {
       _urlController.clear();
       _startIndexController.clear();
       _endIndexController.clear();
-      _output = '';
       _playlistTitle = null;
+      _thumbnailUrl = null;
       _downloadAsAudio = false;
       _createPlaylistFolder = true;
     });
@@ -125,134 +169,158 @@ class _PlaylistDownloadWidgetState extends State<PlaylistDownloadWidget> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Playlist'),
+        title: const Text('Playlist Downloader'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.history),
+            onPressed: (){
+               Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const HistoryScreen()),
+              );
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _resetFields,
-          )
+            onPressed: _isLoading ? null : _resetFields,
+          ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: ListView(
-          children: [
-            TextField(
-              controller: _urlController,
-              decoration: const InputDecoration(
-                labelText: 'Playlist URL',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.link),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.search),
-                    label: const Text('Fetch Playlist Info'),
-                    onPressed: _fetchPlaylistInfo,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.folder_open),
-                    label: const Text('Select Directory'),
-                    onPressed: _pickDirectory,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            if (_playlistTitle != null) ...[
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Playlist Info:', style: TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      Text('Title: $_playlistTitle'),
-                      const SizedBox(height: 8),
-                      Text(_output.split('\n').last),
-                    ],
+      body: AbsorbPointer(
+        absorbing: _isLoading,
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: ListView(
+            children: [
+              TextField(
+                controller: _urlController,
+                decoration: InputDecoration(
+                  labelText: 'Playlist URL',
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.link),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.paste),
+                    onPressed: _isLoading ? null : () async {
+                      final clipboard = await Clipboard.getData('text/plain');
+                      if (clipboard != null) {
+                        _urlController.text = clipboard.text ?? '';
+                      }
+                    },
                   ),
                 ),
               ),
               const SizedBox(height: 20),
+              if (_thumbnailUrl != null)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 20),
+                  height: 250,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    image: DecorationImage(
+                      image: NetworkImage(_thumbnailUrl!),
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
               Row(
                 children: [
                   Expanded(
-                    child: TextField(
-                      controller: _startIndexController,
-                      decoration: const InputDecoration(
-                       labelText: 'Start Index (1 = first video)',
-                        
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: TextInputType.number,
+                    child: ElevatedButton.icon(
+                      icon: _isFetching
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.search),
+                      label: Text(_isFetching ? 'Fetching...' : 'Fetch Info'),
+                      onPressed: _isFetching || _isLoading ? null : _fetchPlaylistInfo,
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: TextField(
-                      controller: _endIndexController,
-                      decoration: const InputDecoration(
-                        labelText: 'End Index (last video if you want to download all list)',
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: TextInputType.number,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.folder_open),
+                      label: const Text('Select Folder'),
+                      onPressed: _isLoading ? null : _pickDirectory,
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 20),
-              SwitchListTile(
-                title: const Text('Download as MP3'),
-                value: _downloadAsAudio,
-                onChanged: (value) => setState(() => _downloadAsAudio = value),
-              ),
-              SwitchListTile(
-                title: const Text('Create playlist folder'),
-                value: _createPlaylistFolder,
-                onChanged: (value) => setState(() => _createPlaylistFolder = value),
-              ),
-              const SizedBox(height: 20),
-            ],
-            ElevatedButton.icon(
-              icon: const Icon(Icons.download),
-              label: const Text('Download Playlist'),
-              onPressed: _downloadPlaylist,
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 15),
-              ),
-            ),
-            const SizedBox(height: 20),
-            if (_isLoading)
-              const Center(child: CircularProgressIndicator())
-            else if (_output.isNotEmpty)
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Status:', style: TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      Text(_output, style: const TextStyle(color: Colors.green)),
-                      if (_selectedDirectory != null) ...[
-                        const SizedBox(height: 12),
-                        const Text('Download Directory:', style: TextStyle(fontWeight: FontWeight.bold)),
-                        Text(_selectedDirectory!),
+              if (_playlistTitle != null) ...[
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _playlistTitle!,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
                       ],
-                    ],
+                    ),
                   ),
                 ),
-              ),
-          ],
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _startIndexController,
+                        decoration: const InputDecoration(
+                          labelText: 'Start Index (1)',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: _endIndexController,
+                        decoration: const InputDecoration(
+                          labelText: 'End Index',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                SwitchListTile(
+                  title: const Text('Download as MP3'),
+                  value: _downloadAsAudio,
+                  onChanged: _isLoading ? null : (value) => setState(() => _downloadAsAudio = value),
+                ),
+                SwitchListTile(
+                  title: const Text('Create playlist folder'),
+                  value: _createPlaylistFolder,
+                  onChanged: _isLoading ? null : (value) => setState(() => _createPlaylistFolder = value),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton.icon(
+                  icon: _isLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.download),
+                  label: Text(_isLoading ? 'Downloading...' : 'Download Playlist'),
+                  onPressed: _isLoading ? null : _downloadPlaylist,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );

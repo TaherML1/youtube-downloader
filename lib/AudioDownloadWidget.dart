@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:process_run/shell.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
+import '../models/download_history.dart'; // Ensure this path is correct
+import '../services/history_db.dart'; // Ensure this path is correct
 
 class AudioDownloadWidget extends StatefulWidget {
   const AudioDownloadWidget({super.key});
@@ -15,8 +16,6 @@ class _AudioDownloadWidgetState extends State<AudioDownloadWidget> {
   final TextEditingController _urlController = TextEditingController();
   String _output = '';
   String? _selectedDirectory;
-  List<String> _audioFormats = [];
-  String? _selectedAudioFormat;
   bool _isLoading = false;
   String? _audioTitle;
   final Shell _shell = Shell();
@@ -37,7 +36,7 @@ class _AudioDownloadWidgetState extends State<AudioDownloadWidget> {
     await prefs.setString('download_directory', directory);
   }
 
-  Future<void> _fetchAudioFormats() async {
+  Future<void> _fetchAndDownloadAudio() async {
     if (_urlController.text.isEmpty) {
       setState(() => _output = 'Please enter a URL');
       return;
@@ -53,44 +52,61 @@ class _AudioDownloadWidgetState extends State<AudioDownloadWidget> {
       var result = await _shell.run('yt-dlp -F ${_urlController.text}');
       List<String> formats = result.outText.split('\n');
 
-      // Parse audio formats
-      _audioFormats = formats.where((line) {
-        return line.contains('audio only') && line.trim().isNotEmpty;
-      }).map((line) {
-        var parts = line.split(RegExp(r'\s+'));
-        return '${parts[0]} (${parts.last})'; // Format code + extension
-      }).toList();
+      // Find the best audio format (e.g., highest bitrate mp3 or m4a)
+      String? bestAudioFormat;
+      for (var line in formats) {
+        if (line.contains('audio only') && line.trim().isNotEmpty) {
+          var parts = line.split(RegExp(r'\s+'));
+          var formatCode = parts[0];
+          var extension = parts.last.contains('mp3') ? 'mp3' : 'm4a';
+          bestAudioFormat = '$formatCode ($extension)';
+          break; // Take the first suitable format found
+        }
+      }
 
-      setState(() => _output = 'Audio formats fetched successfully');
+      if (bestAudioFormat == null) {
+        setState(() => _output = 'No suitable audio format found');
+        return;
+      }
+
+      // Extract format code and extension
+      final audioCode = bestAudioFormat.split(' ').first;
+      final audioExt = bestAudioFormat.split('(').last.replaceAll(')', '').trim();
+
+      // Construct file path
+      final filePath = '$_selectedDirectory/$_audioTitle.$audioExt';
+
+      // Download audio
+      await _shell.run(
+        'yt-dlp -f $audioCode '
+        '-o "$filePath" '
+        '${_urlController.text}'
+      );
+
+      setState(() => _output = 'Audio download completed successfully!');
+
+      // Save download history
+      await _saveDownloadHistory(filePath);
     } catch (e) {
-      setState(() => _output = 'Error fetching audio formats: $e');
+      setState(() => _output = 'Error: $e');
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _downloadAudio() async {
-    if (_selectedDirectory == null || _audioTitle == null) return;
+  Future<void> _saveDownloadHistory(String filePath) async {
+    if (_audioTitle == null || _urlController.text.isEmpty) return;
 
-    setState(() => _isLoading = true);
-    try {
-      // Extract format code and extension
-      final audioCode = _selectedAudioFormat!.split(' ').first;
-      final audioExt = _selectedAudioFormat!.split('(').last.replaceAll(')', '').trim();
+    final history = DownloadHistory(
+      title: _audioTitle!,
+      url: _urlController.text,
+      thumbnailUrl: '', // Assuming no thumbnail for audio
+      filePath: filePath,
+      downloadTime: DateTime.now(),
+      isPlaylist: false,
+    );
 
-      // Download audio
-      await _shell.run(
-        'yt-dlp -f $audioCode '
-        '-o "$_selectedDirectory/$_audioTitle.$audioExt" '
-        '${_urlController.text}'
-      );
-
-      setState(() => _output = 'Audio download completed successfully!');
-    } catch (e) {
-      setState(() => _output = 'Error: $e\nTry different format combinations');
-    } finally {
-      setState(() => _isLoading = false);
-    }
+    await HistoryDatabase.instance.addHistory(history);
   }
 
   Future<void> _pickDirectory() async {
@@ -105,7 +121,6 @@ class _AudioDownloadWidgetState extends State<AudioDownloadWidget> {
     setState(() {
       _urlController.clear();
       _selectedDirectory = null;
-      _selectedAudioFormat = null;
       _output = '';
       _audioTitle = null;
     });
@@ -140,9 +155,15 @@ class _AudioDownloadWidgetState extends State<AudioDownloadWidget> {
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    icon: const Icon(Icons.search),
-                    label: const Text('Fetch Audio Formats'),
-                    onPressed: _fetchAudioFormats,
+                    icon: _isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.download),
+                    label: Text(_isLoading ? 'Downloading...' : 'Download Audio'),
+                    onPressed: _isLoading ? null : _fetchAndDownloadAudio,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -154,29 +175,6 @@ class _AudioDownloadWidgetState extends State<AudioDownloadWidget> {
                   ),
                 ),
               ],
-            ),
-            const SizedBox(height: 20),
-            if (_audioFormats.isNotEmpty)
-              DropdownButtonFormField<String>(
-                decoration: const InputDecoration(
-                  labelText: 'Audio Format',
-                  border: OutlineInputBorder(),
-                ),
-                value: _selectedAudioFormat,
-                items: _audioFormats.map((format) => DropdownMenuItem(
-                  value: format,
-                  child: Text(format),
-                )).toList(),
-                onChanged: (value) => setState(() => _selectedAudioFormat = value),
-              ),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.download),
-              label: const Text('Download Audio'),
-              onPressed: _downloadAudio,
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 15),
-              ),
             ),
             const SizedBox(height: 20),
             if (_isLoading)
